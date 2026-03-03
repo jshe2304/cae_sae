@@ -1,12 +1,7 @@
 import torch
 
 
-def sae_loss(
-    x: torch.Tensor,
-    x_hat: torch.Tensor,
-    aux_x_hat: torch.Tensor | None,
-    beta: float = 1 / 32,
-) -> tuple[torch.Tensor, dict]:
+def sae_loss(x, x_hat, aux_x_hat, beta=1/32):
     mse = (x - x_hat).pow(2).mean()
 
     aux_mse = torch.tensor(0.0, device=x.device)

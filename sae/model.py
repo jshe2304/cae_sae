@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class TopKSAE(nn.Module):
-    def __init__(self, n_input: int, n_latent: int, k: int, aux_k: int = 512):
+    def __init__(self, n_input, n_latent, k, aux_k=512):
         super().__init__()
         self.n_input = n_input
         self.n_latent = n_latent
@@ -33,13 +33,13 @@ class TopKSAE(nn.Module):
         self._normalize_decoder()
 
     @staticmethod
-    def topk_activation(x: torch.Tensor, k: int) -> torch.Tensor:
+    def topk_activation(x, k):
         topk_vals, topk_idx = torch.topk(x, k, dim=-1)
         out = torch.zeros_like(x)
         out.scatter_(-1, topk_idx, topk_vals)
         return out
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, dict]:
+    def forward(self, x):
         # Encode
         x_centered = x - self.b
         alpha_pre = self.encoder(x_centered)
@@ -74,10 +74,10 @@ class TopKSAE(nn.Module):
         }
         return x_hat, info
 
-    def _effective_threshold(self) -> int:
+    def _effective_threshold(self):
         return self.miss_counts.new_tensor(1).item()  # minimum 1 to avoid issues at step 0
 
-    def update_dead_mask(self, fired_mask: torch.Tensor):
+    def update_dead_mask(self, fired_mask):
         """Update miss counts: increment for inactive features, reset for active."""
         any_fired = fired_mask.any(dim=0)  # (n_latent,)
         self.miss_counts[any_fired] = 0

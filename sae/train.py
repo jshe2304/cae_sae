@@ -9,7 +9,7 @@ from sae.losses import sae_loss
 from sae.model import TopKSAE
 
 
-def train(cfg: dict):
+def train(cfg):
     torch.manual_seed(cfg["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
@@ -112,7 +112,7 @@ def train(cfg: dict):
         wandb.finish()
 
 
-def _save_checkpoint(model: TopKSAE, dataset, cfg: dict, path: Path):
+def _save_checkpoint(model, dataset, cfg, path):
     torch.save({
         "model_state_dict": model.state_dict(),
         "n_input": model.n_input,

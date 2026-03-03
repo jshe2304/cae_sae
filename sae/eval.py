@@ -5,7 +5,7 @@ import torch
 from sae.model import TopKSAE
 
 
-def load_sae(checkpoint_path: str | Path, device: str = "cpu") -> tuple[TopKSAE, dict]:
+def load_sae(checkpoint_path, device="cpu"):
     ckpt = torch.load(checkpoint_path, weights_only=False, map_location=device)
     model = TopKSAE(
         n_input=ckpt["n_input"],
@@ -20,12 +20,7 @@ def load_sae(checkpoint_path: str | Path, device: str = "cpu") -> tuple[TopKSAE,
 
 
 @torch.no_grad()
-def compute_metrics(
-    model: TopKSAE,
-    data: torch.Tensor,
-    batch_size: int = 8192,
-    device: str = "cpu",
-) -> dict:
+def compute_metrics(model, data, batch_size=8192, device="cpu"):
     model.eval()
     model.to(device)
 
@@ -59,12 +54,7 @@ def compute_metrics(
 
 
 @torch.no_grad()
-def extract_features(
-    model: TopKSAE,
-    data: torch.Tensor,
-    batch_size: int = 8192,
-    device: str = "cpu",
-) -> torch.Tensor:
+def extract_features(model, data, batch_size=8192, device="cpu"):
     """Get sparse activations for all samples. Returns (n_samples, n_latent)."""
     model.eval()
     model.to(device)

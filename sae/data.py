@@ -8,7 +8,7 @@ LAYER_NAMES = ["IN", "E1", "E2", "E3", "E4", "E5", "D1", "D2", "D3", "D4", "D5",
 class EmbeddingDataset:
     """Load a CAE layer embedding tensor and reshape for SAE training."""
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path):
         tensor = torch.load(path, weights_only=True)  # (N, C, Ny, Nx)
         N, C, Ny, Nx = tensor.shape
         # Reshape: (N, C, Ny, Nx) -> (N, Ny, Nx, C) -> (N*Ny*Nx, C)
@@ -20,16 +20,11 @@ class EmbeddingDataset:
         self.std = self.data.std(dim=0).clamp(min=1e-8)
         self.data = (self.data - self.mean) / self.std
 
-    def denormalize(self, x: torch.Tensor) -> torch.Tensor:
+    def denormalize(self, x):
         return x * self.std.to(x.device) + self.mean.to(x.device)
 
 
-def make_dataloader(
-    data_dir: str | Path,
-    layer_name: str,
-    batch_size: int,
-    seed: int = 42,
-) -> tuple[DataLoader, int, EmbeddingDataset]:
+def make_dataloader(data_dir, layer_name, batch_size, seed=42):
     path = Path(data_dir) / f"{layer_name}.pt"
     ds = EmbeddingDataset(path)
     tensor_ds = TensorDataset(ds.data)

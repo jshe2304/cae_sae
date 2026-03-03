@@ -11,11 +11,11 @@ from pathlib import Path
 from sae.data import LAYER_NAMES
 
 
-def load_sweep_config(path: str | Path) -> dict:
+def load_sweep_config(path):
     return toml.load(path)
 
 
-def write_job_toml(path: Path, layer: str, k: int, n_latent: int, sweep: dict):
+def write_job_toml(path, layer, k, n_latent, sweep):
     """Write a per-job TOML config file."""
     content = f"""[sae]
 n_latent = {n_latent}
@@ -36,7 +36,7 @@ log_every = 100
     path.write_text(content)
 
 
-def build_jobs(sweep: dict) -> list[tuple[str, Path]]:
+def build_jobs(sweep):
     """Build (job_name, config_path) pairs for all grid combinations."""
     layers = sweep.get("layers", LAYER_NAMES)
     k_values = sweep.get("k_values", [16, 32, 64, 128])
@@ -57,7 +57,7 @@ def build_jobs(sweep: dict) -> list[tuple[str, Path]]:
     return jobs
 
 
-def run_local(jobs: list[tuple[str, Path]]):
+def run_local(jobs):
     for name, cfg_path in jobs:
         print(f"\n{'='*60}")
         print(f"Running: {name}")
@@ -67,7 +67,7 @@ def run_local(jobs: list[tuple[str, Path]]):
             print(f"FAILED: {name} (exit code {result.returncode})")
 
 
-def run_slurm(jobs: list[tuple[str, Path]], sweep: dict, slurm: dict):
+def run_slurm(jobs, sweep, slurm):
     scripts_dir = Path(sweep["output_dir"]) / "slurm_scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     log_dir = Path(sweep["output_dir"]) / "slurm_logs"
