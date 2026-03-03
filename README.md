@@ -6,11 +6,11 @@ Train TopK Sparse Autoencoders (SAEs) on embeddings from each layer of a pre-tra
 
 ```
 cae_vae/
-├── pyproject.toml              # Dependencies: torch, pyyaml, wandb
+├── pyproject.toml              # Dependencies: torch, toml, wandb
 ├── configs/
-│   └── default.yaml            # Default hyperparameters
+│   ├── default.toml            # Default hyperparameters for single training
+│   └── sweep.toml              # Sweep grid and SLURM settings
 ├── sae/
-│   ├── config.py               # SAEConfig dataclass (YAML + CLI overrides)
 │   ├── model.py                # TopKSAE module
 │   ├── data.py                 # Load .pt embeddings, reshape, normalize
 │   ├── losses.py               # MSE + auxiliary dead-feature loss
@@ -52,43 +52,67 @@ After each optimizer step, decoder column norms are projected back to unit norm 
 pip install -e .
 ```
 
+## Configuration
+
+All scripts are configured via TOML files — no command-line arguments. Edit a `.toml` file and pass its path as the single positional argument.
+
 ## Training a Single Layer
 
-```bash
-python -m scripts.train_single \
-    --data_dir /path/to/embeddings \
-    --layer_name E1 \
-    --k 64 \
-    --n_latent 4096 \
-    --num_epochs 50 \
-    --output_dir ./outputs
+Edit `configs/default.toml` (or create a new `.toml` file) to set your parameters:
+
+```toml
+[sae]
+n_latent = 4096
+k = 64
+batch_size = 8192
+lr = 3e-4
+num_epochs = 50
+aux_k = 512
+aux_beta = 0.03125
+dead_threshold = 50000
+data_dir = "/path/to/embeddings"
+layer_name = "E1"
+output_dir = "./outputs"
+use_wandb = false
+seed = 42
+log_every = 100
 ```
 
-All arguments from `configs/default.yaml` can be overridden via CLI flags. Run with `--use_wandb` to enable Weights & Biases logging.
+Then run:
+
+```bash
+python -m scripts.train_single configs/default.toml
+```
 
 Checkpoints are saved to `{output_dir}/{layer_name}/k{k}_n{n_latent}/` as `best.pt` (lowest epoch-average MSE) and `final.pt`.
 
 ## Hyperparameter Sweep
 
-Grid search over `k` in {16, 32, 64, 128} and `n_latent` in {2048, 4096, 8192} for all 12 layers (144 jobs total).
+Grid search over `k` and `n_latent` for all (or a subset of) layers. Configure via `configs/sweep.toml`:
 
-**Local** (runs sequentially):
+```toml
+[sweep]
+mode = "local"  # "local" or "slurm"
+data_dir = "/path/to/embeddings"
+output_dir = "./outputs"
+num_epochs = 50
+use_wandb = false
+layers = ["IN", "E1", "E2", "E3", "E4", "E5", "D1", "D2", "D3", "D4", "D5", "OUT"]
+k_values = [16, 32, 64, 128]
+n_latent_values = [2048, 4096, 8192]
 
-```bash
-python -m scripts.sweep --mode local --data_dir /path/to/embeddings
+[slurm]
+partition = "gpu"
+time = "04:00:00"
 ```
 
-**SLURM** (submits one job per combination):
+Then run:
 
 ```bash
-python -m scripts.sweep --mode slurm --data_dir /path/to/embeddings --partition gpu
+python -m scripts.sweep configs/sweep.toml
 ```
 
-To run a subset of layers:
-
-```bash
-python -m scripts.sweep --mode local --data_dir /path/to/embeddings --layers E1 E2 E3
-```
+The sweep generates per-job `.toml` configs in `{output_dir}/sweep_configs/` and either runs them sequentially (local) or submits each as a SLURM job.
 
 ## Evaluation
 
