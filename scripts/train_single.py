@@ -3,8 +3,6 @@
 Usage:
     python -m scripts.train_single configs/default.toml
 """
-from __future__ import annotations
-
 import sys
 
 import toml

@@ -3,8 +3,6 @@
 Usage:
     python -m scripts.sweep configs/sweep.toml
 """
-from __future__ import annotations
-
 import subprocess
 import sys
 import toml
