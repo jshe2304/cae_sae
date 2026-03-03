@@ -1,0 +1,15 @@
+[sae]
+n_latent = 4096
+k = 64
+batch_size = 8192
+lr = 3e-4
+num_epochs = 50
+aux_k = 512
+aux_beta = 0.03125  # 1/32
+dead_threshold = 50000
+data_dir = "./data"
+layer_name = "E1"
+output_dir = "./outputs"
+use_wandb = false
+seed = 42
+log_every = 100

@@ -1,0 +1,13 @@
+[sweep]
+mode = "local"  # "local" or "slurm"
+data_dir = "./data"
+output_dir = "./outputs"
+num_epochs = 50
+use_wandb = false
+layers = ["IN", "E1", "E2", "E3", "E4", "E5", "D1", "D2", "D3", "D4", "D5", "OUT"]
+k_values = [16, 32, 64, 128]
+n_latent_values = [2048, 4096, 8192]
+
+[slurm]
+partition = "gpu"
+time = "04:00:00"
