@@ -5,35 +5,39 @@ Usage:
 """
 import subprocess
 import sys
-import toml
+import textwrap
+from itertools import product
 from pathlib import Path
+
+import toml
 
 from sae.data import LAYER_NAMES
 
+DEFAULTS = {
+    "batch_size": 8192,
+    "lr": 3e-4,
+    "aux_k": 512,
+    "aux_beta": 0.03125,
+    "dead_threshold": 50000,
+    "seed": 42,
+    "log_every": 100,
+}
 
-def load_sweep_config(path):
-    return toml.load(path)
 
-
-def write_job_toml(path, layer, k, n_latent, sweep):
-    """Write a per-job TOML config file."""
-    content = f"""[sae]
-n_latent = {n_latent}
-k = {k}
-batch_size = 8192
-lr = 3e-4
-num_epochs = {sweep['num_epochs']}
-aux_k = 512
-aux_beta = 0.03125
-dead_threshold = 50000
-data_dir = "{sweep['data_dir']}"
-layer_name = "{layer}"
-output_dir = "{sweep['output_dir']}"
-use_wandb = {str(sweep['use_wandb']).lower()}
-seed = 42
-log_every = 100
-"""
-    path.write_text(content)
+def build_job_config(layer, k, n_latent, sweep):
+    """Build a config dict for a single training job."""
+    return {
+        "sae": {
+            **DEFAULTS,
+            "n_latent": n_latent,
+            "k": k,
+            "num_epochs": sweep["num_epochs"],
+            "data_dir": sweep["data_dir"],
+            "layer_name": layer,
+            "output_dir": sweep["output_dir"],
+            "use_wandb": sweep["use_wandb"],
+        }
+    }
 
 
 def build_jobs(sweep):
@@ -46,13 +50,11 @@ def build_jobs(sweep):
     configs_dir.mkdir(parents=True, exist_ok=True)
 
     jobs = []
-    for layer in layers:
-        for k in k_values:
-            for n_latent in n_latent_values:
-                name = f"{layer}_k{k}_n{n_latent}"
-                cfg_path = configs_dir / f"{name}.toml"
-                write_job_toml(cfg_path, layer, k, n_latent, sweep)
-                jobs.append((name, cfg_path))
+    for layer, k, n_latent in product(layers, k_values, n_latent_values):
+        name = f"{layer}_k{k}_n{n_latent}"
+        cfg_path = configs_dir / f"{name}.toml"
+        cfg_path.write_text(toml.dumps(build_job_config(layer, k, n_latent, sweep)))
+        jobs.append((name, cfg_path))
 
     return jobs
 
@@ -67,27 +69,31 @@ def run_local(jobs):
             print(f"FAILED: {name} (exit code {result.returncode})")
 
 
+def make_slurm_script(name, cfg_path, log_dir, slurm):
+    return textwrap.dedent(f"""\
+        #!/bin/bash
+        #SBATCH --job-name={name}
+        #SBATCH --output={log_dir}/{name}_%j.out
+        #SBATCH --error={log_dir}/{name}_%j.err
+        #SBATCH --partition={slurm.get('partition', 'gpu')}
+        #SBATCH --gres=gpu:1
+        #SBATCH --cpus-per-task=4
+        #SBATCH --mem=32G
+        #SBATCH --time={slurm.get('time', '04:00:00')}
+
+        {sys.executable} -m scripts.train_single {cfg_path}
+    """)
+
+
 def run_slurm(jobs, sweep, slurm):
     scripts_dir = Path(sweep["output_dir"]) / "slurm_scripts"
-    scripts_dir.mkdir(parents=True, exist_ok=True)
     log_dir = Path(sweep["output_dir"]) / "slurm_logs"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
     for name, cfg_path in jobs:
-        script = f"""#!/bin/bash
-#SBATCH --job-name={name}
-#SBATCH --output={log_dir}/{name}_%j.out
-#SBATCH --error={log_dir}/{name}_%j.err
-#SBATCH --partition={slurm.get('partition', 'gpu')}
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --time={slurm.get('time', '04:00:00')}
-
-{sys.executable} -m scripts.train_single {cfg_path}
-"""
         script_path = scripts_dir / f"{name}.sh"
-        script_path.write_text(script)
+        script_path.write_text(make_slurm_script(name, cfg_path, log_dir, slurm))
 
         result = subprocess.run(["sbatch", str(script_path)], capture_output=True, text=True)
         print(f"Submitted {name}: {result.stdout.strip()}")
@@ -95,7 +101,7 @@ def run_slurm(jobs, sweep, slurm):
 
 def main():
     config_path = sys.argv[1] if len(sys.argv) > 1 else "configs/sweep.toml"
-    raw = load_sweep_config(config_path)
+    raw = toml.load(config_path)
     sweep = raw["sweep"]
     slurm = raw.get("slurm", {})
 
