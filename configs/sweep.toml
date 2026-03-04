@@ -1,13 +1,29 @@
-[sweep]
-mode = "local"  # "local" or "slurm"
-data_dir = "/ocean/projects/atm170004p/lxu5/ConvAE/EVAL_DATA/SNAPSHOTS/CAEwCP_TrP_A_TrS_10000_KS_5_LN_5_LD_256_BS_2_LR_0.001_WD_1e-06_DP_0.0_EN_1500_SD_42/ep_best_pi_0/TeP_A_10000_TD_0.2_SAE/"
 output_dir = "/ocean/projects/atm170004p/jshen6/cae_sae/"
-num_epochs = 50
 use_wandb = false
+
+[data]
+data_dir = "/ocean/projects/atm170004p/lxu5/ConvAE/EVAL_DATA/SNAPSHOTS/CAEwCP_TrP_A_TrS_10000_KS_5_LN_5_LD_256_BS_2_LR_0.001_WD_1e-06_DP_0.0_EN_1500_SD_42/ep_best_pi_0/TeP_A_10000_TD_0.2_SAE/"
+batch_size = 8192
+seed = 42
+
+[model]
+aux_k = 512
+
+[training]
+num_epochs = 50
+lr = 3e-4
+aux_beta = 0.03125
+dead_threshold = 50000
+log_every = 100
+
+[grid]
 layers = ["IN", "E1", "E2", "E3", "E4", "E5", "D1", "D2", "D3", "D4", "D5", "OUT"]
 k_values = [16, 32, 64, 128]
 n_latent_values = [2048, 4096, 8192]
 
 [slurm]
 partition = "gpu"
+gres = "gpu:1"
+cpus-per-task = 4
+mem = "32G"
 time = "04:00:00"

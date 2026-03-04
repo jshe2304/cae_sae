@@ -13,87 +13,65 @@ import toml
 
 from sae.data import LAYER_NAMES
 
-DEFAULTS = {
-    "batch_size": 8192,
-    "lr": 3e-4,
-    "aux_k": 512,
-    "aux_beta": 0.03125,
-    "dead_threshold": 50000,
-    "seed": 42,
-    "log_every": 100,
-}
 
-
-def build_job_config(layer, k, n_latent, sweep):
-    """Build a config dict for a single training job."""
+def build_job_config(config, layer, k, n_latent):
+    """
+    Build a config dict for a single training job.
+    """
     return {
-        "sae": {
-            **DEFAULTS,
-            "n_latent": n_latent,
-            "k": k,
-            "num_epochs": sweep["num_epochs"],
-            "data_dir": sweep["data_dir"],
-            "layer_name": layer,
-            "output_dir": sweep["output_dir"],
-            "use_wandb": sweep["use_wandb"],
-        }
+        "output_dir": config["output_dir"],
+        "use_wandb": config["use_wandb"],
+        "data": {**config["data"], "layer_name": layer},
+        "model": {**config["model"], "n_latent": n_latent, "k": k},
+        "training": config["training"],
     }
 
 
-def build_jobs(sweep):
-    """Build (job_name, config_path) pairs for all grid combinations."""
-    layers = sweep.get("layers", LAYER_NAMES)
-    k_values = sweep.get("k_values", [16, 32, 64, 128])
-    n_latent_values = sweep.get("n_latent_values", [2048, 4096, 8192])
+def build_jobs(config):
+    """
+    Build (job_name, config_path) pairs for all grid combinations.
+    """
+    grid = config["grid"]
+    layers = grid.get("layers", LAYER_NAMES)
+    k_values = grid.get("k_values", [16, 32, 64, 128])
+    n_latent_values = grid.get("n_latent_values", [2048, 4096, 8192])
 
-    configs_dir = Path(sweep["output_dir"]) / "sweep_configs"
+    configs_dir = Path(config["output_dir"]) / "sweep_configs"
     configs_dir.mkdir(parents=True, exist_ok=True)
 
     jobs = []
     for layer, k, n_latent in product(layers, k_values, n_latent_values):
         name = f"{layer}_k{k}_n{n_latent}"
         cfg_path = configs_dir / f"{name}.toml"
-        cfg_path.write_text(toml.dumps(build_job_config(layer, k, n_latent, sweep)))
+        cfg_path.write_text(toml.dumps(build_job_config(config, layer, k, n_latent)))
         jobs.append((name, cfg_path))
 
     return jobs
 
+def make_slurm_script(name, config_path, log_dir, slurm):
+    slurm = {
+        **slurm,
+        "job-name": name,
+        "output": f"{log_dir}/{name}_%j.out",
+        "error": f"{log_dir}/{name}_%j.err",
+    }
+    slurm_args = "\n".join(f"#SBATCH --{k}={v}" for k, v in slurm.items())
 
-def run_local(jobs):
-    for name, cfg_path in jobs:
-        print(f"\n{'='*60}")
-        print(f"Running: {name}")
-        print(f"{'='*60}")
-        result = subprocess.run([sys.executable, "-m", "scripts.train_single", str(cfg_path)])
-        if result.returncode != 0:
-            print(f"FAILED: {name} (exit code {result.returncode})")
-
-
-def make_slurm_script(name, cfg_path, log_dir, slurm):
-    return textwrap.dedent(f"""\
-        #!/bin/bash
-        #SBATCH --job-name={name}
-        #SBATCH --output={log_dir}/{name}_%j.out
-        #SBATCH --error={log_dir}/{name}_%j.err
-        #SBATCH --partition={slurm.get('partition', 'gpu')}
-        #SBATCH --gres=gpu:1
-        #SBATCH --cpus-per-task=4
-        #SBATCH --mem=32G
-        #SBATCH --time={slurm.get('time', '04:00:00')}
-
-        {sys.executable} -m scripts.train_single {cfg_path}
-    """)
+    cmd = f"{sys.executable} -m scripts.train_single {config_path}"
+    return "#!/bin/bash" + f"\n{slurm_args}\n\n" + cmd
 
 
-def run_slurm(jobs, sweep, slurm):
-    scripts_dir = Path(sweep["output_dir"]) / "slurm_scripts"
-    log_dir = Path(sweep["output_dir"]) / "slurm_logs"
+def run_slurm(jobs, config):
+    slurm = config.get("slurm", {})
+    scripts_dir = Path(config["output_dir"]) / "slurm_scripts"
+    log_dir = Path(config["output_dir"]) / "slurm_logs"
+
     scripts_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    for name, cfg_path in jobs:
+    for name, config_path in jobs:
         script_path = scripts_dir / f"{name}.sh"
-        script_path.write_text(make_slurm_script(name, cfg_path, log_dir, slurm))
+        script_path.write_text(make_slurm_script(name, config_path, log_dir, slurm))
 
         result = subprocess.run(["sbatch", str(script_path)], capture_output=True, text=True)
         print(f"Submitted {name}: {result.stdout.strip()}")
@@ -101,18 +79,12 @@ def run_slurm(jobs, sweep, slurm):
 
 def main():
     config_path = sys.argv[1] if len(sys.argv) > 1 else "configs/sweep.toml"
-    raw = toml.load(config_path)
-    sweep = raw["sweep"]
-    slurm = raw.get("slurm", {})
+    config = toml.load(config_path)
 
-    jobs = build_jobs(sweep)
+    jobs = build_jobs(config)
     print(f"Total jobs: {len(jobs)}")
 
-    if sweep["mode"] == "local":
-        run_local(jobs)
-    else:
-        run_slurm(jobs, sweep, slurm)
-
+    run_slurm(jobs, config)
 
 if __name__ == "__main__":
     main()

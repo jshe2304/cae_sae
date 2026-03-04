@@ -65,14 +65,7 @@ class TopKSAE(nn.Module):
             alpha_aux = self.topk_activation(alpha_pre_dead, min(self.aux_k, dead_mask.sum().item()))
             aux_x_hat = self.decoder(alpha_aux) + self.b
 
-        info = {
-            "alpha": alpha,
-            "alpha_pre": alpha_pre,
-            "fired_mask": fired_mask,
-            "dead_mask": dead_mask,
-            "aux_x_hat": aux_x_hat,
-        }
-        return x_hat, info
+        return x_hat, alpha, fired_mask, aux_x_hat
 
     def _effective_threshold(self):
         return self.miss_counts.new_tensor(1).item()  # minimum 1 to avoid issues at step 0

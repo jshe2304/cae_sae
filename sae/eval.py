@@ -33,11 +33,11 @@ def compute_metrics(model, data, batch_size=8192, device="cpu"):
 
     for i in range(0, len(data), batch_size):
         batch = data[i : i + batch_size].to(device)
-        x_hat, info = model(batch)
+        x_hat, alpha, fired_mask, aux_x_hat = model(batch)
 
         total_mse += (batch - x_hat).pow(2).sum().item()
         total_var += (batch - data_mean).pow(2).sum().item()
-        feature_counts += info["fired_mask"].sum(dim=0).float()
+        feature_counts += fired_mask.sum(dim=0).float()
         n_samples += batch.shape[0]
 
     mse = total_mse / (n_samples * model.n_input)
@@ -62,7 +62,7 @@ def extract_features(model, data, batch_size=8192, device="cpu"):
     alphas = []
     for i in range(0, len(data), batch_size):
         batch = data[i : i + batch_size].to(device)
-        _, info = model(batch)
-        alphas.append(info["alpha"].cpu())
+        _, alpha, _, _ = model(batch)
+        alphas.append(alpha.cpu())
 
     return torch.cat(alphas, dim=0)
