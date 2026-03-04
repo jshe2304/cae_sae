@@ -22,8 +22,7 @@ k_values = [16, 32, 64, 128]
 n_latent_values = [2048, 4096, 8192]
 
 [slurm]
-partition = "gpu"
-gres = "gpu:1"
-cpus-per-task = 4
-mem = "32G"
+account="atm170004p"
+partition = "GPU-shared"
+gpus = "v100-16:1"
 time = "04:00:00"
