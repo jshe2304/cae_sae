@@ -133,6 +133,25 @@ print(f"Dead features: {metrics['n_dead']}")
 features = extract_features(model, ds.data)
 ```
 
+## Sweep Analysis
+
+After the sweep completes, evaluate all checkpoints and save metrics to a CSV:
+
+1. Edit paths at the top of `scripts/eval_sweep.py` (`SWEEP_DIR`, `DATA_DIR`), then run:
+
+```bash
+python -m scripts.eval_sweep
+```
+
+This produces `{SWEEP_DIR}/sweep_metrics.csv` with variance explained, MSE, dead feature counts, and feature frequency statistics for every run.
+
+2. Open `notebooks/analyze_sweep.ipynb`, set `CSV_PATH` to the generated CSV, and run all cells. The notebook produces:
+   - Variance explained vs. k (per layer)
+   - Dead feature % vs. k (per layer)
+   - Reconstruction–sparsity trade-off plots
+   - Summary heatmaps across all layers
+   - Recommended configs per layer (sparsest k achieving ≥90% variance explained)
+
 ## Default Hyperparameters
 
 | Parameter | Default | Rationale |
