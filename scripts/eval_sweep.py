@@ -6,32 +6,61 @@ Usage:
 Produces: {SWEEP_DIR}/sweep_metrics.csv
 """
 
+import gc
 from pathlib import Path
 
 import torch
 import pandas as pd
 
-from sae.data import EmbeddingDataset, LAYER_NAMES
+from sae.data import LAYER_NAMES
 from sae.eval import load_sae, compute_metrics
 
 # ---------- Configuration ----------
 SWEEP_DIR = Path("/ocean/projects/atm170004p/jshen6/cae_sae/")
-DATA_DIR = Path("/ocean/projects/atm170004p/lxu5/ConvAE/EVAL_DATA/SNAPSHOTS/CAEwCP_TrP_A_TrS_10000_KS_5_LN_5_LD_256_BS_2_LR_0.001_WD_1e-06_DP_0.0_EN_1500_SD_42/ep_best_pi_0/TeP_A_10000_TD_0.2_SAE/")
+DATA_DIR = Path("/ocean/projects/atm170004p/lxu5/ConvAE/EVAL_DATA/SNAPSHOTS/"
+                "CAEwCP_TrP_A_TrS_10000_KS_5_LN_5_LD_256_BS_2_LR_0.001_WD_1e-06_DP_0.0_EN_1500_SD_42/"
+                "ep_best_pi_0/TeP_A_10000_TD_0.2_SAE/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 LAYERS = LAYER_NAMES
 K_VALUES = [16, 32, 64, 128]
 N_LATENT_VALUES = [2048, 4096, 8192]
+MAX_SAMPLES = 500_000  # subsample large layers to avoid OOM
 # ------------------------------------
 
 OUT_PATH = SWEEP_DIR / "sweep_metrics.csv"
+
+
+def load_layer_data(layer_name):
+    """Load and preprocess layer data, subsampling if too large."""
+    path = DATA_DIR / f"{layer_name}.pt"
+    tensor = torch.load(path, weights_only=True)  # (N, C, Ny, Nx)
+    N, C, Ny, Nx = tensor.shape
+    data = tensor.permute(0, 2, 3, 1).reshape(-1, C).float()
+    del tensor
+
+    # Subsample if needed
+    n_total = data.shape[0]
+    if n_total > MAX_SAMPLES:
+        idx = torch.randperm(n_total, generator=torch.Generator().manual_seed(42))[:MAX_SAMPLES]
+        data = data[idx]
+        print(f"  Subsampled {n_total:,} -> {MAX_SAMPLES:,} samples")
+
+    # Normalize
+    mean = data.mean(dim=0)
+    std = data.std(dim=0).clamp(min=1e-8)
+    data = (data - mean) / std
+    del mean, std
+
+    return data
+
 
 rows = []
 missing = []
 
 for layer in LAYERS:
     print(f"\n=== Layer {layer} ===")
-    ds = EmbeddingDataset(DATA_DIR / f"{layer}.pt")
-    data = ds.data
+    data = load_layer_data(layer)
+    print(f"  Data shape: {data.shape}")
 
     for k in K_VALUES:
         for n_latent in N_LATENT_VALUES:
@@ -65,11 +94,12 @@ for layer in LAYERS:
             print(f"  {run_name}: VE={metrics['variance_explained']:.4f}, "
                   f"dead={metrics['n_dead']}/{n_latent} ({metrics['n_dead']/n_latent*100:.1f}%)")
 
-            del model
+            del model, metrics, freq, alive_freq
             if DEVICE == "cuda":
                 torch.cuda.empty_cache()
 
-    del data, ds
+    del data
+    gc.collect()
 
 df = pd.DataFrame(rows)
 df.to_csv(OUT_PATH, index=False)
